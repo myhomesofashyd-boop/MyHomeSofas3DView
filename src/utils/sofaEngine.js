@@ -365,7 +365,7 @@ function addSection(parts, annotations, section, config, profile) {
     id: `${section.id}-depth-dim`,
     type: 'line',
     points: [depthStart, depthEnd],
-    text: `Depth: ${config.depth}"`,
+    text: `Breadth: ${config.depth}"`,
     labelPosition: place(section.center, axis, axisSize / 2 + toSceneUnits(12), depthAxis, 0, dimensionY),
   });
 }
@@ -434,6 +434,21 @@ function createSections(config, seats) {
   ];
 }
 
+function getHeightAnnotation(config, totalHeight) {
+  const width = toSceneUnits(config.type === 'L-Shape' ? Math.max(config.mainLength, config.sideLength) : config.length);
+  const depth = toSceneUnits(config.type === 'L-Shape' ? config.sideLength : config.depth);
+  const x = -width / 2 - toSceneUnits(9);
+  const z = depth / 2 + toSceneUnits(9);
+
+  return {
+    id: 'height-dim',
+    type: 'height',
+    points: [[x, 0, z], [x, totalHeight, z]],
+    text: `Height: ${config.height}"`,
+    labelPosition: [x - toSceneUnits(3), totalHeight / 2, z],
+  };
+}
+
 export function generateSofa(config) {
   const seats = calculateSeats(config);
   const profile = profileFor(config);
@@ -442,13 +457,7 @@ export function generateSofa(config) {
   const annotations = [];
 
   sections.forEach((section) => addSection(parts, annotations, section, config, profile));
-  annotations.push({
-    id: 'height-dim',
-    type: 'height',
-    points: [[-3.2, 0, -2.3], [-3.2, profile.totalHeight, -2.3]],
-    text: `Height: ${config.height}"`,
-    labelPosition: [-3.45, profile.totalHeight / 2, -2.3],
-  });
+  annotations.push(getHeightAnnotation(config, profile.totalHeight));
 
   return {
     parts,

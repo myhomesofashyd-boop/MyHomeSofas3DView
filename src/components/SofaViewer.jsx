@@ -1,5 +1,6 @@
 import {
   AccumulativeShadows,
+  Billboard,
   ContactShadows,
   Environment,
   Grid,
@@ -40,6 +41,14 @@ function getViewPreset(footprint, viewMode) {
   if (viewMode === 'front') {
     return {
       position: new THREE.Vector3(0, footprint.height * 1.32 + 0.8, span * 1.85),
+      target,
+      fov: 26,
+    };
+  }
+
+  if (viewMode === 'back') {
+    return {
+      position: new THREE.Vector3(0, footprint.height * 1.32 + 0.8, -span * 1.9),
       target,
       fov: 26,
     };
@@ -89,39 +98,42 @@ function SofaMesh({ part, materialSettings }) {
 function DimensionAnnotation({ annotation }) {
   if (annotation.type === 'text') {
     return (
-      <Text
-        position={annotation.position}
-        rotation={[-Math.PI / 2, 0, 0]}
-        fontSize={annotation.size || 0.16}
-        color={annotation.color || '#0f172a'}
-        anchorX="center"
-        anchorY="middle"
-      >
-        {annotation.text}
-      </Text>
+      <Billboard position={annotation.position} follow>
+        <Text
+          fontSize={annotation.size || 0.16}
+          color={annotation.color || '#0f172a'}
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.012}
+          outlineColor="#ffffff"
+        >
+          {annotation.text}
+        </Text>
+      </Billboard>
     );
   }
 
-  const isHeight = annotation.type === 'height';
   return (
     <group>
-      <Line points={annotation.points} color="#2563eb" lineWidth={2.2} />
+      <Line points={annotation.points} color="#2563eb" lineWidth={2.8} />
       {annotation.points.map((point, index) => (
         <mesh key={`${annotation.id}-cap-${index}`} position={point}>
-          <sphereGeometry args={[0.045, 12, 12]} />
+          <sphereGeometry args={[0.055, 14, 14]} />
           <meshBasicMaterial color="#2563eb" />
         </mesh>
       ))}
-      <Text
-        position={annotation.labelPosition}
-        rotation={isHeight ? [0, Math.PI / 2, 0] : [-Math.PI / 2, 0, 0]}
-        fontSize={0.16}
-        color="#2563eb"
-        anchorX="center"
-        anchorY="middle"
-      >
-        {annotation.text}
-      </Text>
+      <Billboard position={annotation.labelPosition} follow>
+        <Text
+          fontSize={0.18}
+          color="#1d4ed8"
+          anchorX="center"
+          anchorY="middle"
+          outlineWidth={0.014}
+          outlineColor="#ffffff"
+        >
+          {annotation.text}
+        </Text>
+      </Billboard>
     </group>
   );
 }
@@ -220,14 +232,24 @@ function CameraRig({ config, viewMode, controlsRef, isInteracting }) {
   const preset = useMemo(() => getViewPreset(footprint, viewMode), [footprint, viewMode]);
   const animatedPosition = useRef(preset.position.clone());
   const animatedTarget = useRef(preset.target.clone());
+  const transitionActive = useRef(true);
+  const holdPreset = useRef(viewMode !== '3d');
 
   useEffect(() => {
     camera.fov = preset.fov;
     camera.updateProjectionMatrix();
-  }, [camera, preset.fov]);
+    animatedPosition.current.copy(camera.position);
+    animatedTarget.current.copy(controlsRef.current?.target || preset.target);
+    transitionActive.current = true;
+    holdPreset.current = viewMode !== '3d';
+  }, [camera, controlsRef, preset, viewMode]);
 
   useFrame(() => {
     if (isInteracting.current) {
+      return;
+    }
+
+    if (!transitionActive.current && !holdPreset.current) {
       return;
     }
 
@@ -240,6 +262,15 @@ function CameraRig({ config, viewMode, controlsRef, isInteracting }) {
       controlsRef.current.update();
     } else {
       camera.lookAt(animatedTarget.current);
+    }
+
+    if (
+      camera.position.distanceTo(preset.position) < 0.03 &&
+      animatedTarget.current.distanceTo(preset.target) < 0.03
+    ) {
+      animatedPosition.current.copy(preset.position);
+      animatedTarget.current.copy(preset.target);
+      transitionActive.current = false;
     }
   });
 
@@ -256,7 +287,7 @@ function ViewerPill({ label, value }) {
 }
 
 export default function SofaViewer({ config, sofaModel, viewMode, onViewModeChange }) {
-  const [autoRotate, setAutoRotate] = useState(true);
+  const [autoRotate, setAutoRotate] = useState(false);
   const [showMeasurements, setShowMeasurements] = useState(true);
   const controlsRef = useRef(null);
   const isInteracting = useRef(false);
@@ -295,6 +326,7 @@ export default function SofaViewer({ config, sofaModel, viewMode, onViewModeChan
             touches={{ ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_ROTATE }}
             onStart={() => {
               isInteracting.current = true;
+              setAutoRotate(false);
             }}
             onEnd={() => {
               window.setTimeout(() => {
@@ -327,6 +359,7 @@ export default function SofaViewer({ config, sofaModel, viewMode, onViewModeChan
             ['3d', 'Main View'],
             ['top', 'Top View'],
             ['front', 'Front'],
+            ['back', 'Back'],
             ['side', 'Side'],
           ].map(([mode, label]) => (
             <button
